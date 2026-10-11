@@ -30,7 +30,7 @@ PHASE 2: THE RAW CAPTURE
 ------------------------
 Below is an extract of the frame analysis from the captured traffic log, detailing the erratic connection attempts between our internal services, external API callers, and internal proxy layers:
 
-02:14:12.104291 IP 192.168.10.45 .49152 > 10.240.12.102.8080: Flags [S], seq 382910482, win 65535, options [mss 1460,sackOK,TS val 29481023 ecr 0,nop,wscale 7], length 0
+02:14:12.104291 IP 192.168.10.45.49152 > 10.240.12.102.8080: Flags [S], seq 382910482, win 65535, options [mss 1460,sackOK,TS val 29481023 ecr 0,nop,wscale 7], length 0
 02:14:12.104312 IP 10.240.12.102.8080 > 192.168.10.45.49152: Flags [S.], seq 918203918, ack 382910483, win 28960, options [mss 1460,sok,TS val 81920391 ecr 29481023,nop,wscale 7], length 0
 02:14:12.105120 IP 192.168.10.45.49152 > 10.240.12.102.8080: Flags [.], ack 1, win 512, length 0
 02:14:12.106441 IP 192.168.10.45.49152 > 10.240.12.102.8080: Flags [P.], seq 1:451, ack 1, win 512, length 450

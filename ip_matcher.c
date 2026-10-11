@@ -16,7 +16,7 @@ typedef enum {
 
 struct ip_matcher_impl {
     ip_state_t state;
-    char buf[IP_MAX_LEN + 1];
+    char buf[IP_CIDR_MAX_LEN + 1];
     char last_match[IP_CIDR_MAX_LEN + 1];
     int len;
     int octet_val;

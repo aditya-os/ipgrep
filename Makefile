@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c11
 TARGET = ipgrep
-SRC = main.c ip_matcher.c
+SRC = main.c ip_matcher.c ip_cidr.c
 
 .PHONY: all clean run
 
