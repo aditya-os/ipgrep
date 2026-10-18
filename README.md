@@ -52,6 +52,32 @@ The program exits with an error if the `-n` value or `-nf` file contains an
 invalid IPv4 address or CIDR range. CIDR prefixes must be between `0` and
 `32`. The `-n` and `-nf` options are mutually exclusive.
 
+## CIDR matching semantics
+
+Configured filters are treated as networks. A detected address is matched
+using its raw IPv4 address, even if the text includes a CIDR suffix.
+
+For example:
+
+```text
+Filter: 172.16.4.12/30
+Input:  172.16.4.12/24
+Result: match
+```
+
+The detected token contributes the address `172.16.4.12`; its `/24` suffix is
+not used as the lookup mask. Conversely:
+
+```text
+Filter: 172.16.4.0/30
+Input:  172.16.4.12/24
+Result: no match
+```
+
+This is host-address filtering, not CIDR-range intersection. In standard CIDR
+notation, `172.16.4.12/24` normalizes to the network `172.16.4.0/24`; ipgrep
+does not currently perform range-to-range matching for detected CIDR tokens.
+
 ## Output
 
 Each matching address is printed as:
