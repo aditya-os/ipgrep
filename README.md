@@ -1,7 +1,7 @@
 # ipgrep
 
-`ipgrep` scans a text file for IPv4 addresses and prints only the addresses
-that belong to one or more IP/CIDR ranges passed as input parameter.
+`ipgrep` scans input for IPv4 addresses and prints them with their line and
+character position. Optional IP/CIDR filters can restrict the output.
 
 ## Build
 
@@ -14,14 +14,21 @@ This creates the `ipgrep` executable.
 ## Usage
 
 ```sh
-./ipgrep -f <input-file> -n <ip-or-cidr>[,<ip-or-cidr>...]
+./ipgrep [-f <input-file>] [-n <ip-or-cidr>[,<ip-or-cidr>...] | -nf <cidr-file>]
 ```
 
-The `-n` argument is required and may contain:
+If `-f` is omitted, input is read from standard input. `-f -` is also
+accepted as an explicit standard-input argument. If neither `-n` nor `-nf`
+is supplied, every detected IPv4 address is printed.
+
+Use `-n` for an inline filter list. It may contain:
 
 - A single IPv4 address, treated as `/32`.
 - A CIDR range such as `192.168.10.0/24`.
 - Multiple addresses or ranges separated by commas.
+
+Use `-nf` when the filter list is stored in a file. The two options are
+mutually exclusive.
 
 Examples:
 
@@ -29,10 +36,21 @@ Examples:
 ./ipgrep -f capture.txt -n 192.168.10.45
 ./ipgrep -f capture.txt -n 192.168.10.0/24
 ./ipgrep -f capture.txt -n '192.168.10.0/24,10.240.12.0/24,172.16.4.12'
+./ipgrep -f capture.txt -nf cidr-ranges.txt
 ```
 
-The program exits with an error if the `-n` value is not a valid IPv4 address
-or CIDR range. CIDR prefixes must be between `0` and `32`.
+For a filter file, entries may be written one per line or separated by
+commas. Whitespace is ignored, so this is valid:
+
+```text
+10.2.3.4/30, 10.2.3.12/29,
+10.2.3.32/28
+10.2.3.48/28
+```
+
+The program exits with an error if the `-n` value or `-nf` file contains an
+invalid IPv4 address or CIDR range. CIDR prefixes must be between `0` and
+`32`. The `-n` and `-nf` options are mutually exclusive.
 
 ## Output
 
@@ -67,7 +85,9 @@ addresses; the port suffixes are not included in the matches.
 - `Makefile` — build and cleanup targets.
 
 The CIDR lookup logic is isolated in `ip_cidr.c`, so it can later be replaced
-with another lookup implementation without changing the text scanner.
+with another lookup implementation without changing the text scanner. When a
+filter file is used, its size is used to estimate the initial CIDR-list
+capacity; the list grows geometrically only if the estimate is too small.
 
 ## Cleanup
 

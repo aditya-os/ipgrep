@@ -10,6 +10,13 @@ static void skip_spaces(const char **cursor)
     }
 }
 
+static void skip_horizontal_spaces(const char **cursor)
+{
+    while (**cursor == ' ' || **cursor == '\t' || **cursor == '\r') {
+        (*cursor)++;
+    }
+}
+
 static int parse_uint(const char **cursor, unsigned int max, unsigned int *value)
 {
     const char *start = *cursor;
@@ -56,10 +63,11 @@ static int parse_one(const char **cursor, ip_cidr_t *result)
         }
     }
 
-    result->network = ((uint32_t)octet[0] << 24) |
+    result->address = ((uint32_t)octet[0] << 24) |
                       ((uint32_t)octet[1] << 16) |
                       ((uint32_t)octet[2] << 8) |
                       (uint32_t)octet[3];
+    result->network = result->address;
     result->prefix_len = (uint8_t)prefix;
     if (prefix != 0) {
         result->network &= UINT32_MAX << (32 - prefix);
@@ -81,36 +89,76 @@ void ip_cidr_list_free(ip_cidr_list_t *list)
 
 int ip_cidr_list_parse(ip_cidr_list_t *list, const char *input)
 {
+    return ip_cidr_list_parse_estimated(list, input, 1);
+}
+
+int ip_cidr_list_parse_estimated(ip_cidr_list_t *list, const char *input,
+                                 size_t estimated_count)
+{
     const char *cursor = input;
+    size_t capacity = estimated_count == 0 ? 1 : estimated_count;
+    ip_cidr_t *items = malloc(capacity * sizeof(*items));
+
+    if (items == NULL) {
+        ip_cidr_list_free(list);
+        return 0;
+    }
 
     ip_cidr_list_free(list);
+    list->items = items;
+
     for (;;) {
         ip_cidr_t parsed;
-        ip_cidr_t *new_items;
+
+        skip_spaces(&cursor);
+        if (*cursor == '\0') {
+            break;
+        }
 
         if (!parse_one(&cursor, &parsed)) {
             ip_cidr_list_free(list);
             return 0;
         }
 
-        new_items = realloc(list->items, (list->count + 1) * sizeof(*new_items));
-        if (new_items == NULL) {
-            ip_cidr_list_free(list);
-            return 0;
+        if (list->count == capacity) {
+            size_t new_capacity = capacity * 2;
+            ip_cidr_t *new_items = realloc(list->items,
+                                           new_capacity * sizeof(*new_items));
+            if (new_items == NULL) {
+                ip_cidr_list_free(list);
+                return 0;
+            }
+            list->items = new_items;
+            capacity = new_capacity;
         }
-        list->items = new_items;
         list->items[list->count++] = parsed;
 
-        skip_spaces(&cursor);
+        skip_horizontal_spaces(&cursor);
         if (*cursor == '\0') {
-            return 1;
+            break;
         }
-        if (*cursor != ',') {
+        if (*cursor == ',') {
+            cursor++;
+            skip_spaces(&cursor);
+            if (*cursor == '\0') {
+                /* A final comma is allowed. */
+                break;
+            }
+            continue;
+        }
+        if (*cursor == '\n') {
+            do {
+                cursor++;
+            } while (*cursor == '\n');
+            continue;
+        }
+        {
             ip_cidr_list_free(list);
             return 0;
         }
-        cursor++;
     }
+
+    return 1;
 }
 
 int ip_cidr_list_contains(const ip_cidr_list_t *list, const char *address_text)
@@ -130,7 +178,7 @@ int ip_cidr_list_contains(const ip_cidr_list_t *list, const char *address_text)
         uint32_t mask = list->items[i].prefix_len == 0
                       ? 0
                       : UINT32_MAX << (32 - list->items[i].prefix_len);
-        if ((address.network & mask) == list->items[i].network) {
+        if ((address.address & mask) == list->items[i].network) {
             return 1;
         }
     }
