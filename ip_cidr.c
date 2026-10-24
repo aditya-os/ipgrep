@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <stdlib.h>
+#include <string.h>
 
 static void skip_spaces(const char **cursor)
 {
@@ -87,13 +88,19 @@ void ip_cidr_list_free(ip_cidr_list_t *list)
     ip_cidr_list_init(list);
 }
 
+static int ip_cidr_list_parse_with_capacity(ip_cidr_list_t *list,
+                                            const char *input,
+                                            size_t estimated_count);
+
 int ip_cidr_list_parse(ip_cidr_list_t *list, const char *input)
 {
-    return ip_cidr_list_parse_estimated(list, input, 1);
+    size_t estimated_count = strlen(input) / 16 + 1;
+    return ip_cidr_list_parse_with_capacity(list, input, estimated_count);
 }
 
-int ip_cidr_list_parse_estimated(ip_cidr_list_t *list, const char *input,
-                                 size_t estimated_count)
+static int ip_cidr_list_parse_with_capacity(ip_cidr_list_t *list,
+                                            const char *input,
+                                            size_t estimated_count)
 {
     const char *cursor = input;
     size_t capacity = estimated_count == 0 ? 1 : estimated_count;

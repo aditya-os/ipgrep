@@ -20,8 +20,6 @@ typedef struct {
 void ip_cidr_list_init(ip_cidr_list_t *list);
 void ip_cidr_list_free(ip_cidr_list_t *list);
 int ip_cidr_list_parse(ip_cidr_list_t *list, const char *input);
-int ip_cidr_list_parse_estimated(ip_cidr_list_t *list, const char *input,
-                                 size_t estimated_count);
 int ip_cidr_list_contains(const ip_cidr_list_t *list, const char *address_text);
 
 #endif

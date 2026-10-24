@@ -30,6 +30,10 @@ Use `-n` for an inline filter list. It may contain:
 Use `-nf` when the filter list is stored in a file. The two options are
 mutually exclusive.
 
+The filter file must be smaller than 1 MiB (1,048,576 bytes). Its reported
+size is used to allocate the input buffer up front. The file is expected to
+remain unchanged while it is being read.
+
 Examples:
 
 ```sh
@@ -111,9 +115,9 @@ addresses; the port suffixes are not included in the matches.
 - `Makefile` — build and cleanup targets.
 
 The CIDR lookup logic is isolated in `ip_cidr.c`, so it can later be replaced
-with another lookup implementation without changing the text scanner. When a
-filter file is used, its size is used to estimate the initial CIDR-list
-capacity; the list grows geometrically only if the estimate is too small.
+with another lookup implementation without changing the text scanner. The
+parser estimates the initial CIDR-list capacity from the input length, and the
+list grows geometrically only if the estimate is too small.
 
 ## Cleanup
 

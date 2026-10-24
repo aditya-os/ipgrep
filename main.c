@@ -2,6 +2,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -10,6 +11,7 @@
 #include "ip_matcher.h"
 
 #define BUF_SIZE 4096
+#define FILTER_FILE_MAX_SIZE (1024U * 1024U)
 
 static void write_str(int fd, const char *s)
 {
@@ -35,7 +37,7 @@ static void print_usage(const char *program)
 }
 
 static int load_filter_file(const char *filename, const char **input,
-                            char **owned_input, size_t *estimated_count)
+                            char **owned_input)
 {
     int fd = open(filename, O_RDONLY);
     if (fd < 0) {
@@ -48,38 +50,36 @@ static int load_filter_file(const char *filename, const char **input,
         return 0;
     }
 
-    /* Most IPv4/CIDR entries are around 16 bytes long. */
-    *estimated_count = (size_t)(file_info.st_size / 16) + 1;
+    if (file_info.st_size < 0 ||
+        (uintmax_t)file_info.st_size >= FILTER_FILE_MAX_SIZE) {
+        errno = EFBIG;
+        close(fd);
+        return 0;
+    }
 
-    size_t length = 0;
-    size_t capacity = 4096;
-    char *contents = malloc(capacity + 1);
+    size_t file_size = (size_t)file_info.st_size;
+    char *contents = malloc(file_size + 1);
     if (contents == NULL) {
         close(fd);
         return 0;
     }
 
-    for (;;) {
-        if (length == capacity) {
-            size_t new_capacity = capacity * 2;
-            char *new_contents = realloc(contents, new_capacity + 1);
-            if (new_contents == NULL) {
-                free(contents);
-                close(fd);
-                return 0;
-            }
-            contents = new_contents;
-            capacity = new_capacity;
-        }
-
-        ssize_t count = read(fd, contents + length, capacity - length);
+    size_t length = 0;
+    while (length < file_size) {
+        ssize_t count = read(fd, contents + length, file_size - length);
         if (count < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
             free(contents);
             close(fd);
             return 0;
         }
         if (count == 0) {
-            break;
+            errno = EIO;
+            free(contents);
+            close(fd);
+            return 0;
         }
         length += (size_t)count;
     }
@@ -98,8 +98,7 @@ int main(int argc, char *argv[])
     char *network_input = NULL;
     char *network_file = NULL;
     const char *filter_input; // indicates the input filter.
-    char *owned_filter_input = NULL; // indicates if filter is argv or allocated. 
-    size_t estimated_count = 1;
+    char *owned_filter_input = NULL; // indicates if filter is argv or allocated.
     int has_filter;
     int close_input = 0;
     ip_cidr_list_t networks;
@@ -132,8 +131,8 @@ int main(int argc, char *argv[])
     has_filter = network_input != NULL || network_file != NULL;
 
     if (network_file != NULL) {
-        if (!load_filter_file(network_file, &filter_input, &owned_filter_input,
-                              &estimated_count)) {
+        if (!load_filter_file(network_file, &filter_input,
+                              &owned_filter_input)) {
             dprintf(STDERR_FILENO, "Cannot read CIDR file %s: %s\n",
                     network_file, strerror(errno));
             ip_cidr_list_free(&networks);
@@ -143,8 +142,7 @@ int main(int argc, char *argv[])
         filter_input = network_input;
     }
 
-    if (has_filter &&
-        !ip_cidr_list_parse_estimated(&networks, filter_input, estimated_count)) {
+    if (has_filter && !ip_cidr_list_parse(&networks, filter_input)) {
         write_str(STDERR_FILENO, "Invalid IP/CIDR input\n");
         print_usage(argv[0]);
         free(owned_filter_input);
