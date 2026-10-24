@@ -112,12 +112,19 @@ addresses; the port suffixes are not included in the matches.
 - `ip_matcher.c/.h` — character-by-character IPv4 and CIDR token matcher.
 - `ip_cidr.c/.h` — CIDR parsing, normalization, list management, and range
   membership checks.
+- `ip_cidr_trie.c/.h` — separate binary-trie construction and numeric IPv4
+  lookup. It accepts parsed `ip_cidr_t` values and does not parse text while
+  inserting entries.
 - `Makefile` — build and cleanup targets.
 
 The CIDR lookup logic is isolated in `ip_cidr.c`, so it can later be replaced
 with another lookup implementation without changing the text scanner. The
 parser estimates the initial CIDR-list capacity from the input length, and the
 list grows geometrically only if the estimate is too small.
+
+The trie module is compiled with the application but is currently independent
+of the executable's list-based lookup path. This keeps the existing behavior
+unchanged while allowing trie lookup to be benchmarked or integrated later.
 
 ## Cleanup
 
