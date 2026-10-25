@@ -30,6 +30,16 @@ Use `-n` for an inline filter list. It may contain:
 Use `-nf` when the filter list is stored in a file. The two options are
 mutually exclusive.
 
+By default, filtering uses the existing CIDR-list lookup. Set
+`IPGREP_USE_TRIE=1` to build a binary trie once and use trie-based lookups:
+
+```sh
+IPGREP_USE_TRIE=1 ./ipgrep -f capture.txt -n 192.168.10.0/24
+```
+
+The values `true`, `yes`, and `on` also enable trie mode. Any other value, or
+an unset variable, keeps the list-based lookup.
+
 The filter file must be smaller than 1 MiB (1,048,576 bytes). Its reported
 size is used to allocate the input buffer up front. The file is expected to
 remain unchanged while it is being read.
@@ -110,21 +120,22 @@ addresses; the port suffixes are not included in the matches.
 - `main.c` — command-line handling, file streaming, line/position tracking,
   and output.
 - `ip_matcher.c/.h` — character-by-character IPv4 and CIDR token matcher.
-- `ip_cidr.c/.h` — CIDR parsing, normalization, list management, and range
-  membership checks.
+- `ip_cidr.c/.h` — shared CIDR parsing, normalization, list management, and
+  range membership checks.
 - `ip_cidr_trie.c/.h` — separate binary-trie construction and numeric IPv4
   lookup. It accepts parsed `ip_cidr_t` values and does not parse text while
   inserting entries.
+- `ip_cidr_store.c/.h` — common function-pointer dispatch layer selecting the
+  list or trie storage and lookup backend.
 - `Makefile` — build and cleanup targets.
 
-The CIDR lookup logic is isolated in `ip_cidr.c`, so it can later be replaced
-with another lookup implementation without changing the text scanner. The
-parser estimates the initial CIDR-list capacity from the input length, and the
-list grows geometrically only if the estimate is too small.
+CIDR text parsing is separated from storage. The parser emits normalized
+`ip_cidr_t` values through an insertion callback, and the selected store
+backend receives those values through its common insert operation.
 
-The trie module is compiled with the application but is currently independent
-of the executable's list-based lookup path. This keeps the existing behavior
-unchanged while allowing trie lookup to be benchmarked or integrated later.
+The trie module is compiled with the application and is selected at runtime by
+`IPGREP_USE_TRIE`. Without that variable, the existing list-based lookup path
+is used unchanged.
 
 ## Cleanup
 

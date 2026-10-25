@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include "ip_cidr.h"
+#include "ip_cidr_store.h"
 #include "ip_matcher.h"
 
 #define BUF_SIZE 4096
@@ -34,6 +35,27 @@ static void print_usage(const char *program)
             "Usage: %s [-f <input-file>] [-n <ip-or-cidr>[,<ip-or-cidr>...] | "
             "-nf <cidr-file>]\n",
             program);
+}
+
+static int env_flag_enabled(const char *name)
+{
+    const char *value = getenv(name);
+
+    return value != NULL &&
+           (strcmp(value, "1") == 0 ||
+            strcmp(value, "true") == 0 ||
+            strcmp(value, "yes") == 0 ||
+            strcmp(value, "on") == 0);
+}
+
+static int address_matches(const ip_cidr_store_t *store,
+                           const char *address_text)
+{
+    ip_cidr_t address;
+    if (!ip_cidr_parse(address_text, &address)) {
+        return 0;
+    }
+    return ip_cidr_store_contains_address(store, address.address);
 }
 
 static int load_filter_file(const char *filename, const char **input,
@@ -100,15 +122,22 @@ int main(int argc, char *argv[])
     const char *filter_input; // indicates the input filter.
     char *owned_filter_input = NULL; // indicates if filter is argv or allocated.
     int has_filter;
+    int use_trie = env_flag_enabled("IPGREP_USE_TRIE");
     int close_input = 0;
-    ip_cidr_list_t networks;
+    ip_cidr_store_t store = {0};
     ip_matcher_t matcher;
     char buf[BUF_SIZE];
     ssize_t bytes_read;
     size_t line = 1;
     size_t position = 1;
 
-    ip_cidr_list_init(&networks);
+    if (!ip_cidr_store_init(&store,
+                            use_trie ? IP_CIDR_STORE_TRIE
+                                     : IP_CIDR_STORE_LIST)) {
+        write_str(STDERR_FILENO, "Unable to initialize CIDR store\n");
+        return 1;
+    }
+
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
             input_file = argv[++i];
@@ -118,13 +147,14 @@ int main(int argc, char *argv[])
             network_file = argv[++i];
         } else {
             print_usage(argv[0]);
+            ip_cidr_store_free(&store);
             return 1;
         }
     }
 
     if ((network_input != NULL && network_file != NULL)) {
         print_usage(argv[0]);
-        ip_cidr_list_free(&networks);
+        ip_cidr_store_free(&store);
         return 1;
     }
 
@@ -135,18 +165,18 @@ int main(int argc, char *argv[])
                               &owned_filter_input)) {
             dprintf(STDERR_FILENO, "Cannot read CIDR file %s: %s\n",
                     network_file, strerror(errno));
-            ip_cidr_list_free(&networks);
+            ip_cidr_store_free(&store);
             return 1;
         }
     } else if (network_input != NULL) {
         filter_input = network_input;
     }
 
-    if (has_filter && !ip_cidr_list_parse(&networks, filter_input)) {
+    if (has_filter && !ip_cidr_store_parse(&store, filter_input)) {
         write_str(STDERR_FILENO, "Invalid IP/CIDR input\n");
         print_usage(argv[0]);
         free(owned_filter_input);
-        ip_cidr_list_free(&networks);
+        ip_cidr_store_free(&store);
         return 1;
     }
 
@@ -157,7 +187,7 @@ int main(int argc, char *argv[])
         if (fd < 0) {
             dprintf(STDERR_FILENO, "%s: %s\n", input_file, strerror(errno));
             free(owned_filter_input);
-            ip_cidr_list_free(&networks);
+            ip_cidr_store_free(&store);
             return 1;
         }
         close_input = 1;
@@ -167,9 +197,8 @@ int main(int argc, char *argv[])
     while ((bytes_read = read(fd, buf, sizeof(buf))) > 0) {
         for (ssize_t i = 0; i < bytes_read; i++) {
             if (ip_matcher_feed(&matcher, buf[i]) &&
-                (!has_filter ||
-                 ip_cidr_list_contains(&networks,
-                                       ip_matcher_get_match(&matcher)))) {
+                (!has_filter || address_matches(&store,
+                                                ip_matcher_get_match(&matcher)))) {
                 const char *match = ip_matcher_get_match(&matcher);
                 print_match(match, line, position - strlen(match));
             }
@@ -188,13 +217,13 @@ int main(int argc, char *argv[])
             close(fd);
         }
         free(owned_filter_input);
-        ip_cidr_list_free(&networks);
+        ip_cidr_store_free(&store);
         return 1;
     }
 
     if (ip_matcher_flush(&matcher) &&
-        (!has_filter ||
-         ip_cidr_list_contains(&networks, ip_matcher_get_match(&matcher)))) {
+        (!has_filter || address_matches(&store,
+                                        ip_matcher_get_match(&matcher)))) {
         const char *match = ip_matcher_get_match(&matcher);
         print_match(match, line, position - strlen(match));
     }
@@ -203,6 +232,6 @@ int main(int argc, char *argv[])
         close(fd);
     }
     free(owned_filter_input);
-    ip_cidr_list_free(&networks);
+    ip_cidr_store_free(&store);
     return 0;
 }
