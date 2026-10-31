@@ -1,8 +1,26 @@
 # ipgrep
 
-`ipgrep` scans input for IPv4 addresses and prints them with their line and
-character position. Optional IP/CIDR filters or subnet-coverage checks can
-restrict the output.
+`ipgrep` scans text or packet/log files for IPv4 addresses and reports each
+match with its line number and character position. It provides two different
+ways to match networks:
+
+- **Network matching (`-n` or `-nf`)** filters individual IPv4 addresses. You
+  provide one or more IP addresses or CIDR networks, and `ipgrep` prints a
+  detected address when that address belongs to one of the configured
+  networks. For example, filtering with `10.0.0.0/8` matches `10.24.3.7`.
+  This mode treats the detected value as a host address; if the input contains
+  `10.24.3.7/24`, only `10.24.3.7` is used for the lookup.
+
+- **Subnet matching (`-s`)** compares CIDR ranges with other CIDR ranges. You
+  provide subnets to look for, and `ipgrep` reports an input CIDR when it
+  covers one or more requested subnets. It emits an `M` record for each
+  matching input CIDR and a `U` record for every requested subnet that was not
+  covered. This mode is useful for checking whether a route or address-range
+  file contains coverage for a set of required subnets.
+
+In short, `-n`/`-nf` answers “does this detected address belong to one of my
+networks?”, while `-s` answers “does this detected subnet cover one of my
+target subnets?”.
 
 ## Build
 
