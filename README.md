@@ -1,7 +1,8 @@
 # ipgrep
 
 `ipgrep` scans input for IPv4 addresses and prints them with their line and
-character position. Optional IP/CIDR filters can restrict the output.
+character position. Optional IP/CIDR filters or subnet-coverage checks can
+restrict the output.
 
 ## Build
 
@@ -14,7 +15,7 @@ This creates the `ipgrep` executable.
 ## Usage
 
 ```sh
-./ipgrep [-f <input-file>] [-n <ip-or-cidr>[,<ip-or-cidr>...] | -nf <cidr-file>]
+./ipgrep [-f <input-file>] [-n <ip-or-cidr>[,<ip-or-cidr>...] | -nf <cidr-file> | -s <cidr>[,<cidr>...]]
 ```
 
 If `-f` is omitted, input is read from standard input. `-f -` is also
@@ -66,6 +67,33 @@ The program exits with an error if the `-n` value or `-nf` file contains an
 invalid IPv4 address or CIDR range. CIDR prefixes must be between `0` and
 `32`. The `-n` and `-nf` options are mutually exclusive.
 
+Use `-s` for CIDR coverage mode. Its comma-separated values are the subnets
+to find in the input. A plain IP is treated as a `/32`. Each CIDR detected in
+the input file is reported when it covers at least one `-s` value. `-s` is
+mutually exclusive with `-n` and `-nf`.
+
+Coverage output is written as:
+
+```text
+M,<line>,<position>:<file-cidr>
+```
+
+After the input is processed, each requested subnet that was not covered is
+written as a normalized CIDR:
+
+```text
+U,<input-cidr>
+```
+
+For example:
+
+```sh
+./ipgrep -f routes.txt -s '10.1.0.0/16,10.1.0.2,172.16.4.0/24'
+```
+
+A file CIDR that covers multiple requested subnets produces one `M` record;
+all covered subnets are marked so only uncovered values produce `U` records.
+
 ## CIDR matching semantics
 
 Configured filters are treated as networks. A detected address is matched
@@ -88,9 +116,10 @@ Input:  172.16.4.12/24
 Result: no match
 ```
 
-This is host-address filtering, not CIDR-range intersection. In standard CIDR
-notation, `172.16.4.12/24` normalizes to the network `172.16.4.0/24`; ipgrep
-does not currently perform range-to-range matching for detected CIDR tokens.
+This is host-address filtering, not CIDR-range comparison. In standard CIDR
+notation, `172.16.4.12/24` normalizes to the network `172.16.4.0/24`; the
+`-n` and `-nf` modes do not use that range for matching. The separate `-s`
+mode performs CIDR-to-CIDR coverage checks as described above.
 
 ## Output
 

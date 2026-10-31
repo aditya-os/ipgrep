@@ -29,6 +29,10 @@ int ip_cidr_parse(const char *input, ip_cidr_t *result);
 int ip_cidr_parse_entries(const char *input,
                           ip_cidr_insert_fn insert,
                           void *context);
+int ip_cidr_covers(const ip_cidr_t *outer, const ip_cidr_t *inner);
+int ip_cidr_format(const ip_cidr_t *cidr,
+                   char *output,
+                   size_t output_size);
 int ip_cidr_list_parse(ip_cidr_list_t *list, const char *input);
 int ip_cidr_list_contains(const ip_cidr_list_t *list, const char *address_text);
 

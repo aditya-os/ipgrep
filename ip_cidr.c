@@ -1,6 +1,7 @@
 #include "ip_cidr.h"
 
 #include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -236,6 +237,42 @@ int ip_cidr_parse_entries(const char *input,
     }
 
     return 1;
+}
+
+int ip_cidr_covers(const ip_cidr_t *outer, const ip_cidr_t *inner)
+{
+    uint32_t mask;
+
+    if (outer == NULL || inner == NULL ||
+        outer->prefix_len > 32 || inner->prefix_len > 32 ||
+        outer->prefix_len > inner->prefix_len) {
+        return 0;
+    }
+
+    mask = prefix_mask(outer->prefix_len);
+    return (inner->network & mask) == (outer->network & mask);
+}
+
+int ip_cidr_format(const ip_cidr_t *cidr,
+                   char *output,
+                   size_t output_size)
+{
+    uint32_t address;
+    int length;
+
+    if (cidr == NULL || output == NULL || output_size == 0 ||
+        cidr->prefix_len > 32) {
+        return 0;
+    }
+
+    address = cidr->network;
+    length = snprintf(output, output_size, "%u.%u.%u.%u/%u",
+                      (unsigned int)((address >> 24) & 0xffU),
+                      (unsigned int)((address >> 16) & 0xffU),
+                      (unsigned int)((address >> 8) & 0xffU),
+                      (unsigned int)(address & 0xffU),
+                      (unsigned int)cidr->prefix_len);
+    return length >= 0 && (size_t)length < output_size;
 }
 
 int ip_cidr_list_contains_address(const ip_cidr_list_t *list,
