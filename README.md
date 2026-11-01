@@ -59,17 +59,15 @@ IPGREP_USE_TRIE=1 ./ipgrep -f capture.txt -n 192.168.10.0/24
 The values `true`, `yes`, and `on` also enable trie mode. Any other value, or
 an unset variable, keeps the list-based lookup.
 
-The filter file must be smaller than 1 MiB (1,048,576 bytes). Its reported
-size is used to allocate the input buffer up front. The file is expected to
-remain unchanged while it is being read.
+The filter file must be smaller than 1 MiB (1,048,576 bytes).
 
 Examples:
 
 ```sh
-./ipgrep -f capture.txt -n 192.168.10.45
-./ipgrep -f capture.txt -n 192.168.10.0/24
-./ipgrep -f capture.txt -n '192.168.10.0/24,10.240.12.0/24,172.16.4.12'
-./ipgrep -f capture.txt -nf cidr-ranges.txt
+./ipgrep -f capture.log -n 192.168.10.45
+./ipgrep -f capture.log -n 192.168.10.0/24
+./ipgrep -f capture.log -n '192.168.10.0/24,10.240.12.0/24,172.16.4.12'
+./ipgrep -f capture.log -nf cidr-ranges.txt
 ```
 
 For a filter file, entries may be written one per line or separated by
