@@ -129,6 +129,33 @@ class IpGrepFunctionalTests(unittest.TestCase):
         self.assert_success(trie_result)
         self.assertEqual(trie_result.stdout, list_result.stdout)
 
+    def test_radix_mode_matches_list_and_trie_modes(self):
+        args = (
+            "-f", str(FIXTURES / "input.txt"),
+            "-n", "10.0.0.0/8,10.1.0.0/16,192.168.1.0/24,192.168.1.10",
+        )
+        list_result = self.run_ipgrep(*args)
+        trie_result = self.run_ipgrep(*args, env={"IPGREP_USE_TRIE": "1"})
+        radix_result = self.run_ipgrep(*args, env={"IPGREP_USE_RADIX": "1"})
+
+        self.assert_success(list_result)
+        self.assert_success(trie_result)
+        self.assert_success(radix_result)
+        self.assertEqual(trie_result.stdout, list_result.stdout)
+        self.assertEqual(radix_result.stdout, list_result.stdout)
+
+    def test_radix_handles_specific_prefixes_inserted_before_parents(self):
+        args = (
+            "-f", str(FIXTURES / "input.txt"),
+            "-n", "192.168.1.10,10.1.0.0/16,192.168.0.0/16,10.0.0.0/8",
+        )
+        list_result = self.run_ipgrep(*args)
+        radix_result = self.run_ipgrep(*args, env={"IPGREP_USE_RADIX": "1"})
+
+        self.assert_success(list_result)
+        self.assert_success(radix_result)
+        self.assertEqual(radix_result.stdout, list_result.stdout)
+
     def test_match_can_cross_read_buffer_boundary(self):
         input_text = "x" * 4094 + "10.0.0.1\n"
         result = self.run_ipgrep(input_text=input_text)

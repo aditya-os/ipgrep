@@ -260,6 +260,7 @@ int main(int argc, char *argv[])
     char *subnet_input = NULL;
     bool has_network_filter;
     bool has_subnet_filter;
+    int use_radix = env_flag_enabled("IPGREP_USE_RADIX");
     int use_trie = env_flag_enabled("IPGREP_USE_TRIE");
     int close_input = 0;
     ip_cidr_store_t store = {0};
@@ -273,8 +274,9 @@ int main(int argc, char *argv[])
     size_t position = 1;
 
     if (!ip_cidr_store_init(&store,
-                            use_trie ? IP_CIDR_STORE_TRIE
-                                     : IP_CIDR_STORE_LIST)) {
+                            use_radix ? IP_CIDR_STORE_RADIX
+                                      : use_trie ? IP_CIDR_STORE_TRIE
+                                                 : IP_CIDR_STORE_LIST)) {
         write_str(STDERR_FILENO, "Unable to initialize CIDR store\n");
         return 1;
     }

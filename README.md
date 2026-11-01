@@ -50,7 +50,8 @@ Use `-nf` when the filter list is stored in a file. The two options are
 mutually exclusive.
 
 By default, filtering uses the existing CIDR-list lookup. Set
-`IPGREP_USE_TRIE=1` to build a binary trie once and use trie-based lookups:
+`IPGREP_USE_TRIE=1` to build an uncompressed binary trie once and use
+trie-based lookups:
 
 ```sh
 IPGREP_USE_TRIE=1 ./ipgrep -f capture.txt -n 192.168.10.0/24
@@ -58,6 +59,17 @@ IPGREP_USE_TRIE=1 ./ipgrep -f capture.txt -n 192.168.10.0/24
 
 The values `true`, `yes`, and `on` also enable trie mode. Any other value, or
 an unset variable, keeps the list-based lookup.
+
+Set `IPGREP_USE_RADIX=1` to use a compressed binary radix trie (also known as
+a Patricia trie):
+
+```sh
+IPGREP_USE_RADIX=1 ./ipgrep -f capture.txt -n 192.168.10.0/24
+```
+
+The radix selector accepts the same `1`, `true`, `yes`, and `on` values. If
+both `IPGREP_USE_RADIX` and `IPGREP_USE_TRIE` are enabled, radix mode takes
+precedence.
 
 The filter file must be smaller than 1 MiB (1,048,576 bytes).
 
@@ -170,17 +182,20 @@ addresses; the port suffixes are not included in the matches.
 - `ip_cidr_trie.c/.h` — separate binary-trie construction and numeric IPv4
   lookup. It accepts parsed `ip_cidr_t` values and does not parse text while
   inserting entries.
+- `ip_cidr_radix.c/.h` — compressed binary-radix construction and numeric
+  IPv4 lookup. It stores prefix paths compactly while preserving the same
+  address-membership semantics as the list and binary-trie backends.
 - `ip_cidr_store.c/.h` — common function-pointer dispatch layer selecting the
-  list or trie storage and lookup backend.
+  list, binary-trie, or radix storage and lookup backend.
 - `Makefile` — build and cleanup targets.
 
 CIDR text parsing is separated from storage. The parser emits normalized
 `ip_cidr_t` values through an insertion callback, and the selected store
 backend receives those values through its common insert operation.
 
-The trie module is compiled with the application and is selected at runtime by
-`IPGREP_USE_TRIE`. Without that variable, the existing list-based lookup path
-is used unchanged.
+The trie and radix modules are compiled with the application and are selected
+at runtime by `IPGREP_USE_TRIE` or `IPGREP_USE_RADIX`. Without either variable,
+the existing list-based lookup path is used unchanged.
 
 ## Cleanup
 

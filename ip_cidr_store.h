@@ -7,7 +7,8 @@
 
 typedef enum {
     IP_CIDR_STORE_LIST,
-    IP_CIDR_STORE_TRIE
+    IP_CIDR_STORE_TRIE,
+    IP_CIDR_STORE_RADIX
 } ip_cidr_store_kind_t;
 
 typedef struct ip_cidr_store_ops {
