@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 
+#include "ip_cidr_radix.h"
 #include "ip_cidr_trie.h"
 
 static int list_init(void *state)
@@ -46,6 +47,27 @@ static int trie_contains_address(const void *state, uint32_t address)
     return ip_cidr_trie_contains_address(state, address);
 }
 
+static int radix_init(void *state)
+{
+    ip_cidr_radix_init(state);
+    return 1;
+}
+
+static void radix_free(void *state)
+{
+    ip_cidr_radix_free(state);
+}
+
+static int radix_insert(void *state, const ip_cidr_t *cidr)
+{
+    return ip_cidr_radix_insert(state, cidr);
+}
+
+static int radix_contains_address(const void *state, uint32_t address)
+{
+    return ip_cidr_radix_contains_address(state, address);
+}
+
 static const ip_cidr_store_ops_t list_ops = {
     .init = list_init,
     .free = list_free,
@@ -60,6 +82,13 @@ static const ip_cidr_store_ops_t trie_ops = {
     .contains_address = trie_contains_address,
 };
 
+static const ip_cidr_store_ops_t radix_ops = {
+    .init = radix_init,
+    .free = radix_free,
+    .insert = radix_insert,
+    .contains_address = radix_contains_address,
+};
+
 static const ip_cidr_store_ops_t *ops_for_kind(ip_cidr_store_kind_t kind,
                                                size_t *state_size)
 {
@@ -70,6 +99,10 @@ static const ip_cidr_store_ops_t *ops_for_kind(ip_cidr_store_kind_t kind,
     if (kind == IP_CIDR_STORE_TRIE) {
         *state_size = sizeof(ip_cidr_trie_t);
         return &trie_ops;
+    }
+    if (kind == IP_CIDR_STORE_RADIX) {
+        *state_size = sizeof(ip_cidr_radix_t);
+        return &radix_ops;
     }
     return NULL;
 }
