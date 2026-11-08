@@ -33,12 +33,32 @@ This creates the `ipgrep` executable.
 ## Usage
 
 ```sh
-./ipgrep [-f <input-file>] [-n <ip-or-cidr>[,<ip-or-cidr>...] | -nf <cidr-file> | -s <cidr>[,<cidr>...]]
+./ipgrep [--print-line] [-f <input-file>] [-n <ip-or-cidr>[,<ip-or-cidr>...] | -nf <cidr-file> | -s <cidr>[,<cidr>...]]
 ```
 
 If `-f` is omitted, input is read from standard input. `-f -` is also
 accepted as an explicit standard-input argument. If neither `-n` nor `-nf`
 is supplied, every detected IPv4 address is printed.
+
+Use `--print-line` to print the complete input line containing a match rather
+than the detected IP/CIDR. Matching lines are printed once, even if a line
+contains multiple matching addresses. Lines are limited to 4096 bytes in this
+mode. The option works with unfiltered input, `-n`, `-nf`, and `-s`.
+
+For ordinary matching, line output is written as:
+
+```text
+<line-number>:<input-line>
+```
+
+In subnet mode, matching source lines are written as `M` records:
+
+```text
+M,<line-number>:<input-line>
+```
+
+Uncovered subnet targets are still written as `U` records because they do not
+correspond to a source input line.
 
 Use `-n` for an inline filter list. It may contain:
 
