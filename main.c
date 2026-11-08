@@ -13,11 +13,30 @@
 #include "ip_matcher.h"
 
 #define BUF_SIZE 4096
+#define INPUT_LINE_MAX 4096
 #define FILTER_FILE_MAX_SIZE (1024U * 1024U)
+
+static void write_bytes(int fd, const char *data, size_t length)
+{
+    while (length > 0) {
+        ssize_t written = write(fd, data, length);
+        if (written < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return;
+        }
+        if (written == 0) {
+            return;
+        }
+        data += written;
+        length -= (size_t)written;
+    }
+}
 
 static void write_str(int fd, const char *s)
 {
-    write(fd, s, strlen(s));
+    write_bytes(fd, s, strlen(s));
 }
 
 static void print_match(const char *match, size_t line, size_t position)
@@ -42,6 +61,29 @@ static void print_coverage_match(const char *match,
     }
 }
 
+static void print_input_line(const char *input_line,
+                             size_t input_line_length,
+                             size_t line,
+                             bool subnet_mode)
+{
+    char prefix[64];
+    int length;
+
+    if (subnet_mode) {
+        length = snprintf(prefix, sizeof(prefix), "M,%zu:", line);
+    } else {
+        length = snprintf(prefix, sizeof(prefix), "%zu:", line);
+    }
+
+    if (length <= 0 || (size_t)length >= sizeof(prefix)) {
+        return;
+    }
+
+    write_bytes(STDOUT_FILENO, prefix, (size_t)length);
+    write_bytes(STDOUT_FILENO, input_line, input_line_length);
+    write_bytes(STDOUT_FILENO, "\n", 1);
+}
+
 static void print_unmatched_cidr(const ip_cidr_t *cidr)
 {
     char formatted[IP_CIDR_MAX_LEN + 1];
@@ -61,7 +103,7 @@ static void print_unmatched_cidr(const ip_cidr_t *cidr)
 static void print_usage(const char *program)
 {
     dprintf(STDERR_FILENO,
-            "Usage: %s [-f <input-file>] [-n <ip-or-cidr>[,<ip-or-cidr>...] | "
+            "Usage: %s [--print-line] [-f <input-file>] [-n <ip-or-cidr>[,<ip-or-cidr>...] | "
             "-nf <cidr-file> | -s <cidr>[,<cidr>...]]\n",
             program);
 }
@@ -113,9 +155,10 @@ typedef struct {
     const ip_cidr_list_t *subnet_targets;
     bool *subnet_matched;
     bool subnet_filter_enabled;
+    bool print_line;
 } match_context_t;
 
-static void process_detected_match(const match_context_t *context,
+static bool process_detected_match(const match_context_t *context,
                                    const char *match,
                                    size_t line,
                                    size_t position)
@@ -125,17 +168,23 @@ static void process_detected_match(const match_context_t *context,
     if (context->subnet_filter_enabled) {
         if (coverage_matches(match, context->subnet_targets,
                              context->subnet_matched)) {
-            print_coverage_match(match, line, match_position);
+            if (!context->print_line) {
+                print_coverage_match(match, line, match_position);
+            }
+            return true;
         }
-        return;
+        return false;
     }
 
     if (context->address_filter_enabled &&
         !address_matches(context->address_store, match)) {
-        return;
+        return false;
     }
 
-    print_match(match, line, match_position);
+    if (!context->print_line) {
+        print_match(match, line, match_position);
+    }
+    return true;
 }
 
 static int load_filter_file(const char *filename, const char **input,
@@ -260,6 +309,7 @@ int main(int argc, char *argv[])
     char *subnet_input = NULL;
     bool has_network_filter;
     bool has_subnet_filter;
+    bool print_line = false;
     int use_radix = env_flag_enabled("IPGREP_USE_RADIX");
     int use_trie = env_flag_enabled("IPGREP_USE_TRIE");
     int close_input = 0;
@@ -269,9 +319,13 @@ int main(int argc, char *argv[])
     match_context_t match_context;
     ip_matcher_t matcher;
     char buf[BUF_SIZE];
+    char line_buffer[INPUT_LINE_MAX + 1];
     ssize_t bytes_read;
     size_t line = 1;
     size_t position = 1;
+    size_t line_length = 0;
+    bool line_has_match = false;
+    bool line_too_long = false;
 
     if (!ip_cidr_store_init(&store,
                             use_radix ? IP_CIDR_STORE_RADIX
@@ -282,7 +336,9 @@ int main(int argc, char *argv[])
     }
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--print-line") == 0) {
+            print_line = true;
+        } else if (strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
             input_file = argv[++i];
         } else if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
             network_input = argv[++i];
@@ -342,24 +398,64 @@ int main(int argc, char *argv[])
         .subnet_targets = &subnet_targets,
         .subnet_matched = subnet_matched,
         .subnet_filter_enabled = has_subnet_filter,
+        .print_line = print_line,
     };
 
     ip_matcher_init(&matcher);
     while ((bytes_read = read(fd, buf, sizeof(buf))) > 0) {
         for (ssize_t i = 0; i < bytes_read; i++) {
+            if (print_line && buf[i] != '\n') {
+                if (line_length >= INPUT_LINE_MAX) {
+                    line_too_long = true;
+                    break;
+                }
+                line_buffer[line_length++] = buf[i];
+                line_buffer[line_length] = '\0';
+            }
+
             if (ip_matcher_feed(&matcher, buf[i])) {
-                process_detected_match(&match_context,
-                                       ip_matcher_get_match(&matcher),
-                                       line,
-                                       position);
+                if (process_detected_match(&match_context,
+                                           ip_matcher_get_match(&matcher),
+                                           line,
+                                           position)) {
+                    line_has_match = true;
+                }
             }
 
             if (buf[i] == '\n') {
+                if (print_line && line_has_match) {
+                    print_input_line(line_buffer, line_length, line,
+                                     has_subnet_filter);
+                }
+
+                if (print_line) {
+                    line_length = 0;
+                    line_buffer[0] = '\0';
+                    line_has_match = false;
+                }
+
                 line++;
                 position = 0;
             } 
             position++;
         }
+
+        if (line_too_long) {
+            break;
+        }
+    }
+
+    if (line_too_long) {
+        dprintf(STDERR_FILENO,
+                "input line exceeds %d bytes\n",
+                INPUT_LINE_MAX);
+        if (close_input) {
+            close(fd);
+        }
+        free(subnet_matched);
+        ip_cidr_list_free(&subnet_targets);
+        ip_cidr_store_free(&store);
+        return 1;
     }
 
     if (bytes_read < 0) {
@@ -374,10 +470,17 @@ int main(int argc, char *argv[])
     }
 
     if (ip_matcher_flush(&matcher)) {
-        process_detected_match(&match_context,
-                               ip_matcher_get_match(&matcher),
-                               line,
-                               position);
+        if (process_detected_match(&match_context,
+                                   ip_matcher_get_match(&matcher),
+                                   line,
+                                   position)) {
+            line_has_match = true;
+        }
+    }
+
+    if (print_line && line_has_match) {
+        print_input_line(line_buffer, line_length, line,
+                         has_subnet_filter);
     }
 
     if (has_subnet_filter) {

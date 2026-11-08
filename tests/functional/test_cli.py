@@ -65,6 +65,60 @@ class IpGrepFunctionalTests(unittest.TestCase):
         self.assert_success(result)
         self.assertEqual(result.stdout, "1:7:10.2.3.4\n")
 
+    def test_print_line_without_filter(self):
+        result = self.run_ipgrep(
+            "--print-line",
+            input_text="src=192.168.1.10 protocol=tcp\n"
+                       "status=ok\n",
+        )
+
+        self.assert_success(result)
+        self.assertEqual(
+            result.stdout,
+            "1:src=192.168.1.10 protocol=tcp\n",
+        )
+
+    def test_print_line_with_network_filter(self):
+        result = self.run_ipgrep(
+            "--print-line",
+            "-n", "10.0.0.0/8",
+            input_text="src=192.168.1.10\n"
+                       "dst=10.1.2.3 protocol=tcp\n",
+        )
+
+        self.assert_success(result)
+        self.assertEqual(
+            result.stdout,
+            "2:dst=10.1.2.3 protocol=tcp\n",
+        )
+
+    def test_print_line_only_once_for_multiple_matches(self):
+        result = self.run_ipgrep(
+            "--print-line",
+            input_text="src=10.1.2.3 dst=10.1.2.4\n",
+        )
+
+        self.assert_success(result)
+        self.assertEqual(
+            result.stdout,
+            "1:src=10.1.2.3 dst=10.1.2.4\n",
+        )
+
+    def test_print_line_with_filter_file(self):
+        result = self.run_ipgrep(
+            "--print-line",
+            "-nf", str(FIXTURES / "network-filters.txt"),
+            input_text="src=192.168.1.10 owner=api\n"
+                       "dst=10.1.2.3 owner=db\n",
+        )
+
+        self.assert_success(result)
+        self.assertEqual(
+            result.stdout,
+            "1:src=192.168.1.10 owner=api\n"
+            "2:dst=10.1.2.3 owner=db\n",
+        )
+
     def test_inline_network_filter(self):
         result = self.run_ipgrep(
             "-n", "10.0.0.0/8",
@@ -116,6 +170,43 @@ class IpGrepFunctionalTests(unittest.TestCase):
             "M,2,7:172.16.4.0/24\n"
             "U,10.2.0.0/16\n",
         )
+
+    def test_print_line_subnet_mode_preserves_unmatched_targets(self):
+        result = self.run_ipgrep(
+            "--print-line",
+            "-f", str(FIXTURES / "routes.txt"),
+            "-s", "10.1.0.2,172.16.4.0/24,10.2.0.0/16",
+        )
+
+        self.assert_success(result)
+        self.assertEqual(
+            result.stdout,
+            "M,1:route 10.1.0.0/16\n"
+            "M,2:route 172.16.4.0/24\n"
+            "U,10.2.0.0/16\n",
+        )
+
+    def test_print_line_from_stdin_without_trailing_newline(self):
+        result = self.run_ipgrep(
+            "--print-line",
+            input_text="final line address=10.1.2.3",
+        )
+
+        self.assert_success(result)
+        self.assertEqual(
+            result.stdout,
+            "1:final line address=10.1.2.3\n",
+        )
+
+    def test_print_line_rejects_lines_longer_than_limit(self):
+        result = self.run_ipgrep(
+            "--print-line",
+            input_text="x" * 4097,
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("input line exceeds 4096 bytes", result.stderr)
 
     def test_trie_mode_matches_list_mode(self):
         args = (
