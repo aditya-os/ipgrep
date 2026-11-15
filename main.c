@@ -402,7 +402,18 @@ int main(int argc, char *argv[])
     };
 
     ip_matcher_init(&matcher);
-    while ((bytes_read = read(fd, buf, sizeof(buf))) > 0) {
+    while (1) {
+        bytes_read = read(fd, buf, sizeof(buf));
+        if (bytes_read < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            break;
+        }
+        if (bytes_read == 0) {
+            break;
+        }
+
         for (ssize_t i = 0; i < bytes_read; i++) {
             if (print_line && buf[i] != '\n') {
                 if (line_length >= INPUT_LINE_MAX) {
